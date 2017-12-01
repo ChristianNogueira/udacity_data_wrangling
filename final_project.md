@@ -6,7 +6,7 @@ Moema, São Paulo, Brasil
 - [https://www.openstreetmap.org/relation/1706557#map=14/-23.5947/-46.6622](https://www.openstreetmap.org/relation/1706557#map=14/-23.5947/-46.6622)
 - [Dados adiquiridos utilizando o MapZen](https://mapzen.com)
 
- Esse é o mapa do bairro que vivo atualmente na cidade de São Paulo. Inicialmente tive a intenção de realizar a análise sobre toda a cidade, mas pela sua magnitude foi restringido ao bairro de Moema.
+ Esse é o mapa do bairro no qual moro atualmente na cidade de São Paulo. Inicialmente tive a intenção de realizar a análise sobre toda a cidade, mas pela sua magnitude foi restringido ao bairro de Moema.
 
 ## Desafios Encontrados
 
@@ -20,8 +20,10 @@ sao-paulo_moema.osm     125MB
 
 ### Quantidade de Tags
 ```python
+import xml.etree.ElementTree as ET
+
 def count_tags(file_name):
-    tags = {}
+    tags = {} #empty dict to hold key, count
     for event, elem in ET.iterparse(file_name):
         if elem.tag in tags:
             tags[elem.tag] += 1
@@ -31,6 +33,9 @@ def count_tags(file_name):
     print('tag : count')
     for key in tags:
         print(key, ':', tags[key])
+
+my_file = 'sao-paulo_moema.osm'
+count_tags(my_file)
 ```
 ```
 tag : count
