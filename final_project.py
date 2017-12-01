@@ -4,8 +4,17 @@
 import os
 import sys
 import json
+import configparser
 import xml.etree.ElementTree as ET  # Use cElementTree or lxml if too slow
 from bs4 import BeautifulSoup
+
+project_path = "C:\\Users\\christian\\Documents\\udacity\\data_wrangling"
+file_osm = os.path.join(project_path, 'data', 'sao-paulo_moema.osm')
+file_osm_small = os.path.join(project_path, 'data', 'sao-paulo_moema_small.json')
+file_json = os.path.join(project_path, 'data', 'sao-paulo_moema.json')
+
+config = configparser.ConfigParser()
+config.read(os.path.join(project_path,'udacity.ini')
 
 def uprint(*objects, sep=' ', end='\n', file=sys.stdout):
     enc = file.encoding
@@ -14,11 +23,6 @@ def uprint(*objects, sep=' ', end='\n', file=sys.stdout):
     else:
         f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
         print(*map(f, objects), sep=sep, end=end, file=file) 
-
-OSM_FILE = "C:\\Users\\christian\\Documents\\udacity\\data_wrangling\\data\\sao-paulo_moema.osm"
-file_path = os.path.dirname(os.path.abspath(file_name))
-SAMPLE_FILE = os.path.join(file_path, 'sao-paulo_moema_small.json')
-file_json = os.path.join(file_path, 'sao-paulo_moema.json')
 
 def get_element(osm_file, tags=('node', 'way', 'relation')):
     context = iter(ET.iterparse(osm_file, events=('start', 'end')))
@@ -72,7 +76,7 @@ def count_tags(file_name):
     return tags
 
 def custom_osm_reader(file_name):
-
+    #read osm files and return custom data dict
     tree = ET.parse(file_name)
     root = tree.getroot()
     data =[]
@@ -89,7 +93,7 @@ def custom_osm_reader(file_name):
             item_mask_2 ={}
             for attri_2 in second_level.attrib:
                 item_mask_2[attri_2] = second_level.attrib[attri_2]
-            
+
             tag_holder.append(item_mask_2)
             
         item_mask['tag'] = tag_holder
@@ -98,12 +102,16 @@ def custom_osm_reader(file_name):
     return data
     
 def save_to_json(data, file_path):
-   with open(file_path, 'w') as fp:
+    #save dict data into a json file
+    with open(file_path, 'w') as fp:
         json.dump(data, fp)
 
-data = custom_osm_reader(OSM_FILE)
+def store_to_mongo(file_json, conn)
+    pass
+
+data = custom_osm_reader(file_osm)
 
 #save_to_json(data, file_json)
-#count_tags(OSM_FILE)
+#count_tags(file_osm)
 #resize_map()      
-#analise(SAMPLE_FILE)
+#analise(file_osm_small)
