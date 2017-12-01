@@ -1,0 +1,4 @@
+*.ini
+*.osm
+
+# osm files are too big to be uploaded, bz2 is attached
