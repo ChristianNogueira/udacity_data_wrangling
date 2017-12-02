@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import json
+import unidecode
 import configparser
 import xml.etree.ElementTree as ET
 from pymongo import MongoClient
@@ -81,13 +83,12 @@ def custom_osm_reader(file_name):
                 item_mask[attri] = first_level.attrib[attri]
             
             # capture n tags 'tag' attributes inside first tag
-            tag_holder = []
+            tag_holder = {}
             for second_level in first_level:
-                item_mask_2 ={}
-                
+
                 if all (key in second_level.attrib for key in ("k", "v")):
-                    item_mask_2[second_level.attrib['k']] = second_level.attrib['v']
-                    tag_holder.append(item_mask_2)
+                    # inside tag we just desire the k (key) and v (value) attributes
+                    tag_holder[second_level.attrib['k']] = second_level.attrib['v']
                 
             item_mask['tag'] = tag_holder
             data.append(item_mask)
@@ -112,9 +113,37 @@ def store_json_mongo(file_json, conn):
                 if i >= response:
                     db.moema.insert(obs)
 
-def data_cleaning(data):
-    pass
-    return data
+def available_minor_tags(data, tag_major):
+    
+    tag_minor = {}
+    for entry in data:
+        if entry['type'] == tag_major:
+            for tag in entry['tag']:
+                if tag in tag_minor:
+                    tag_minor[tag] += 1
+                else:
+                    tag_minor[tag] = 1
+    return tag_minor
+
+
+def data_view(data, tag_major, tag_minor, regex):
+    
+    # street names
+    street_ref_count = {}
+    street_regex = re.compile(regex)
+    for entry in data:
+        if entry['type'] == tag_major:
+            if tag_minor in entry['tag']:
+                street_ref = street_regex.match(entry['tag'][tag_minor])
+                if street_ref:
+                    if street_ref.group(0) in street_ref_count:
+                        street_ref_count[street_ref.group(0)] += 1
+                    else: 
+                        street_ref_count[street_ref.group(0)] = 1
+    
+    # sorted by key print to identify problems
+    for key, value in sorted(street_ref_count.items()):
+        print("%s: %s" % (key, value))
 
 def statistics_mongo():
     with MongoClient(conn_mongo) as client:
@@ -123,11 +152,32 @@ def statistics_mongo():
         print("Total de registros no database")
         print(db.sao_paulo_moema.find().count())
         
+def data_cleaning(data, minor_tag):
+    
+    new_tag = minor_tag + '_clean'
+    regex = '^.+?(\s|$)'
+    # pre compile regex for performance improvment
+    re_compiled = re.compile(regex)
+    
+    for i, entry in enumerate(data):
+        if 'tag' in entry:
+            if minor_tag in entry['tag']:
+                find_match = re_compiled.match(unidecode.unidecode(data[i]['tag'][minor_tag]))
+                if find_match:
+                    data[i]['tag'][new_tag] = find_match.group(0)
+                    
+    return data
+        
 # --------------------------------
 # resize_map()
 # count_tags(file_osm)
 # data = custom_osm_reader(file_osm)
-# data_cleaned = data_cleaning(data)
-# save_to_json(data, file_json)
+# data_cleaned = data_cleaning(data, 'name')
+# save_to_json(data_cleaned, file_json)
+# get available minor tags
+# print(available_minor_tags(data, 'way'))
+# print(available_minor_tags(data, 'node'))
+# Start of ways
+# data_view(data_cleaned, 'node', 'name_clean', '.*')
 # store_json_mongo(file_json, conn_mongo)
-# statistics_mongo()
+statistics_mongo()
