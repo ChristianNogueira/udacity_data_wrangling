@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# .\mongod.exe --config="C:\mongodb\mongo.config"
+
 import os
 import sys
 import json
 import configparser
 import xml.etree.ElementTree as ET  # Use cElementTree or lxml if too slow
+from pymongo import MongoClient
 from bs4 import BeautifulSoup
+from collections import Counter
 
 project_path = "C:\\Users\\christian\\Documents\\udacity\\data_wrangling"
 file_osm = os.path.join(project_path, 'data', 'sao-paulo_moema.osm')
@@ -14,7 +18,8 @@ file_osm_small = os.path.join(project_path, 'data', 'sao-paulo_moema_small.json'
 file_json = os.path.join(project_path, 'data', 'sao-paulo_moema.json')
 
 config = configparser.ConfigParser()
-config.read(os.path.join(project_path,'udacity.ini')
+config.read(os.path.join(project_path,'udacity.ini'))
+conn_mongo = config['default']['mongo']
 
 def uprint(*objects, sep=' ', end='\n', file=sys.stdout):
     enc = file.encoding
@@ -76,7 +81,7 @@ def count_tags(file_name):
     return tags
 
 def custom_osm_reader(file_name):
-    #read osm files and return custom data dict
+    #read osm files and return custom data dict containing tags e attrigutes
     tree = ET.parse(file_name)
     root = tree.getroot()
     data =[]
@@ -91,10 +96,10 @@ def custom_osm_reader(file_name):
         tag_holder = []
         for second_level in first_level:
             item_mask_2 ={}
-            for attri_2 in second_level.attrib:
-                item_mask_2[attri_2] = second_level.attrib[attri_2]
-
-            tag_holder.append(item_mask_2)
+            
+            if all (key in second_level.attrib for key in ("k", "v")):
+                item_mask_2[second_level.attrib['k']] = second_level.attrib['v']
+                tag_holder.append(item_mask_2)
             
         item_mask['tag'] = tag_holder
         data.append(item_mask)
@@ -106,12 +111,25 @@ def save_to_json(data, file_path):
     with open(file_path, 'w') as fp:
         json.dump(data, fp)
 
-def store_to_mongo(file_json, conn)
-    pass
+def store_json_mongo(file_json, conn):
+    #storing using insert, but uploading json is faster
+    with MongoClient(conn) as client:
+        db = client.final_project
+        #if interrupted can resume at same point
+        response = db.moema.find().count()
+        with open(file_json) as f:
+            data = json.loads(f.read())
+            # i is 0 index, so if you have 30 items you resume at i = 30 (31th item)
+            for i, obs in enumerate(data):
+                if i >= response:
+                    db.moema.insert(obs)
 
+# --------------------------------
+
+#store_json_mongo(file_json, conn_mongo)
 data = custom_osm_reader(file_osm)
-
-#save_to_json(data, file_json)
-#count_tags(file_osm)
-#resize_map()      
-#analise(file_osm_small)
+# data_way_attributes(data, 'way')
+# save_to_json(data, file_json)
+# count_tags(file_osm)
+# resize_map()      
+# analise(file_osm_small)
