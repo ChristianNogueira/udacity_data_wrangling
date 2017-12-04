@@ -16,8 +16,15 @@ Mesmo trabalhando com o MongoDb onde o schemma não é fixo, uma boa estrutura d
 
 ```python
 def custom_osm_reader(file_name):
-    # read osm files and return custom data dict containing tags e attrigutes
-    # filter just 'node', 'way' and 'relation' tags
+    """Read OSM from OpenStreetMap
+    Args:
+        file_name: absolute path of osm file
+    Returns:
+        List of dictionaries containing data fom the tags
+        'node', 'way' and 'relation'. The <tag> tag is stored as a dictionary
+        containing the attributes 'k' as key and 'v' as value
+    Raises:
+    """
     tree = ET.parse(file_name)
     root = tree.getroot()
     data =[]
@@ -45,26 +52,89 @@ def custom_osm_reader(file_name):
 
 ### Acentuação
 
-Foram encontrados casos na variação da escrita devido a utilização ou não de acentuação. Assim foi utilizado a função para remover toda a acentuação das palavras utilizando o `unidecode` e criando uma nova característica para os dados contendo apenas a primeira palavra da tag `name`.
+Foram encontrados casos na variação da escrita devido a utilização ou não de acentuação. Assim foi utilizado a função `data_cleaning_names` para remover toda a acentuação das palavras utilizando o `unidecode` e criando uma nova característica para os dados contendo apenas a primeira palavra da tag `name`.
 
 ```python
-def data_cleaning(data, minor_tag):
-    
+def data_cleaning_names(data, minor_tag):
+    """Removes diacritics and get first word
+    Args:
+        data: data from the function custom_osm_reader
+        tag_minor: key values within 'tag' key dictionary
+    Returns:
+        Data with a included key in the 'tag' dictionary, maintaining the original minor_tag
+        and a new named as minor_tag + '_clean'
+    Raises:
+    """
     new_tag = minor_tag + '_clean'
     regex = '^.+?(\s|$)'
-    # pre compile regex for performance improvment
+    # pre compile regex for performance improvement
     re_compiled = re.compile(regex)
     
     for i, entry in enumerate(data):
         if 'tag' in entry:
+            # data has no fixed schemma, verify if tag_minor exists first
             if minor_tag in entry['tag']:
+                # unidecode finds the closest character without diacritics
                 find_match = re_compiled.match(unidecode.unidecode(data[i]['tag'][minor_tag]))
                 if find_match:
                     data[i]['tag'][new_tag] = find_match.group(0)
-                    
+
     return data
+```
+
+### Websites
+
+Outro problema que foi encontrado é na forma que são imputados os URL dos websites. 
+- Presença ou não do protocolo ("http" ou "https") 
+- Presença ou não do "www"
+- Capitalização do URL
+- Presença de *path* ou não após o *domain name*
+
+Assim foi criada a função `data_cleaning_website` para padronizar a representação das URL removendo o protocolo, a presença do "www" e quaisquer *path* após o *domain name*. Também visando a análise a função retorna apenas o *domain* do site (".com", ".com.br" etc) para avaliar quais são mais utilizados. 
+
+```python
+def data_cleaning_website(data):
+    """Standardize websites URL, removes http, https, returns only root site up to first /
+        and returns domain of site
+    Args:
+        data: data from the function custom_osm_reader
+    Returns:
+        Data with new key called "website_clean" and "website_domain"
+    Raises:
+    """
+    regex_clean = r'[a-z0-9\-.]+\.[a-z]{2,3}'
+    regex_domain = r'(\.[a-z]{2,3}){1,2}(\.[a-z]{2,3})?$'
+    # pre compile regex for performance improvement
+    re_clean_compiled = re.compile(regex_clean)
+    re_doamin_compiled = re.compile(regex_domain)
     
-data_cleaned = data_cleaning(data, 'name')
+    for i, entry in enumerate(data):
+        if 'tag' in entry:
+            if 'website' in entry['tag']:
+                # makes all lowercase
+                website_clean = data[i]['tag']['website'].lower()
+                # removes http:// and https://
+                if website_clean[:7] == 'http://':
+                    website_clean = website_clean[7:] 
+                if website_clean[:8] == 'https://':
+                    website_clean = website_clean[8:]
+                
+                find_match = re_clean_compiled.match(website_clean)
+                if find_match:
+                    website_clean = find_match.group(0)
+                
+                # removes www.
+                if website_clean[0:4] == 'www.':
+                    website_clean = website_clean[4:]
+                    
+                data[i]['tag']['website_clean'] = website_clean
+                
+                # gather domain of site
+                find_match = re_doamin_compiled.search(website_clean)
+                if find_match:
+                    data[i]['tag']['website_domain'] = find_match.group(0)
+                
+    return data
 ```
 
 Todo o código utilizado no projeto está disponível no [github](https://github.com/ChristianNogueira/udacity_data_wrangling/blob/master/final_project.py).
@@ -94,8 +164,6 @@ sao-paulo_moema (mongo) 145MB
 
 Quantidade total independente da hierarquia
 ```python
-import xml.etree.ElementTree as ET
-
 def count_tags(file_name):
     tags = {} #empty dict to hold key, count
     for event, elem in ET.iterparse(file_name):
@@ -166,6 +234,39 @@ Dos 277 usuários com contribuições 34% fizeram apenas uma única contribuiç�
 { "_id" : "relation", "count" : 1455 }
 { "_id" : "way", "count" : 75092 }
 { "_id" : "node", "count" : 568270 }
+```
+
+### Observação sobre os *Domain* utilizado
+
+Como esperado o *domain* mais utilizado é o ".com.br" com uma representatividade de 78% dos sites cadastrados.
+```javascript
+> db.sao_paulo_moema.aggregate([{"$match" : {"tag.website_domain" : {"$exists" : 1}}}, {"$group" : {"_id" : "$tag.website_domain", "count" : {"$sum" : 1}}}])
+{ "_id" : ".sp.gov.br", "count" : 5 }
+{ "_id" : ".com", "count" : 9 }
+{ "_id" : ".oep.org.bo", "count" : 1 }
+{ "_id" : ".com.br", "count" : 103 }
+{ "_id" : ".org.br", "count" : 7 }
+{ "_id" : ".gov.br", "count" : 1 }
+{ "_id" : ".org", "count" : 3 }
+{ "_id" : ".br", "count" : 2 }
+```
+
+O interessante é observar o ".oep.org.bo" que é um domain incomum, procurando por esse registro podemos observar que é referente ao consulado Boliviano.
+
+```javascript
+> db.sao_paulo_moema.find({"tag.website_domain" : ".oep.org.bo"}, {"_id" : 0, "tag" : 1}).pretty()
+{
+        "tag" : {
+                "name" : "Oficina de empadronamiento electoral de Bolivia en el exterior",
+                "website" : "http://yoparticipo.oep.org.bo/",
+                "addr:city" : "São Paulo",
+                "addr:street" : "Rua Coronel Artur Godoi",
+                "addr:housenumber" : "7",
+                "website_clean" : "yoparticipo.oep.org.bo",
+                "website_domain" : ".oep.org.bo",
+                "name_clean" : "Oficina "
+        }
+}
 ```
 
 ### Tipos de locais com mais ocorrências (`amenity`) 
